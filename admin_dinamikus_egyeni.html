@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Egyéni Teke - Dinamikus Adminisztráció</title>
+<style>
+    body { font-family: sans-serif; background: #121212; color: white; padding: 15px; margin: 0; }
+    .header-panel { 
+        margin-bottom: 20px; 
+        text-align: center; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        gap: 12px; 
+    }
+    .header-panel input {
+        font-size: 1.4rem; padding: 8px 12px; width: 80%; max-width: 500px;
+        background: #2a2a2a; border: 2px solid #3fb950; color: #ffff00;
+        font-weight: bold; border-radius: 6px; text-align: center;
+    }
+    .btn-group { display: flex; gap: 10px; justify-content: center; }
+    .btn {
+        background: #0044aa; color: white; border: none; padding: 10px 18px;
+        font-size: 1rem; font-weight: bold; border-radius: 6px; cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn:hover { background: #0055ff; }
+    .btn-add { background: #238636; }
+    .btn-add:hover { background: #2ea043; }
+    .btn-danger { background: #da3633; }
+    .btn-danger:hover { background: #f85149; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
+    .card { background: #1e1e1e; padding: 10px; border-radius: 6px; border: 1px solid #333; position: relative; }
+    .card-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; color: #8b949e; }
+    .row { display: flex; gap: 5px; align-items: center; margin-bottom: 6px; }
+    input[type="text"].p-name { flex: 1; background: #2a2a2a; border: 1px solid #444; color: white; padding: 6px; border-radius: 4px; font-weight: bold; }
+    input[type="text"].p-team { flex: 1; background: #2a2a2a; border: 1px solid #444; color: #3fb950; padding: 6px; border-radius: 4px; }
+    .stats-inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; background: #252525; padding: 6px; border-radius: 4px; }
+    .set-box { display: flex; flex-direction: column; gap: 3px; background: #1a1a1a; padding: 4px; border-radius: 4px; text-align: center; }
+    .set-box label { font-size: 0.75rem; color: #3fb950; font-weight: bold; }
+    .set-box input { width: 90%; background: #2a2a2a; border: 1px solid #444; color: white; padding: 4px 0; text-align: center; border-radius: 3px; font-size: 0.85rem; margin: 0 auto; }
+</style>
+
+<!-- Firebase SDK-k -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<div class="header-panel">
+    <input type="text" id="tournamentTitle" value="Egyéni Teke Bajnokság" placeholder="Bajnokság / Verseny Neve" oninput="sendData()">
+    <div class="btn-group">
+        <button class="btn btn-add" onclick="addPlayer()">+ Új játékos hozzáadása</button>
+        <button class="btn btn-danger" onclick="removeLastPlayer()">Legutolsó törlése</button>
+    </div>
+</div>
+
+<div class="grid" id="playersContainer"></div>
+
+<script>
+const firebaseConfig = {
+    apiKey: "aizasyd8o7xyctxtjlqcm8z-29xtbopbxrybjom",
+    authDomain: "teke-eredmenyek.firebaseapp.com",
+    databaseURL: "https://teke-eredmenyek-default-rtdb.firebaseio.com",
+    projectId: "teke-eredmenyek",
+    storageBucket: "teke-eredmenyek.appspot.com"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.database();
+
+let playerCount = 0;
+
+function createPlayerCard(index) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `player-card-${index}`;
+    card.innerHTML = `
+        <div class="card-header">
+            <span>#${index + 1} Játékos</span>
+        </div>
+        <div class="row">
+            <input type="text" class="p-name" placeholder="Játékos neve" oninput="sendData()">
+            <input type="text" class="p-team" placeholder="Csapat / Egyesület" oninput="sendData()">
+        </div>
+        <div class="stats-inputs">
+            ${[0,1,2,3].map(s => `
+                <div class="set-box">
+                    <label>S${s+1}</label>
+                    <input type="number" class="p-teli${s}" placeholder="Teli" oninput="sendData()">
+                    <input type="number" class="p-tarol${s}" placeholder="Tar" oninput="sendData()">
+                    <input type="number" class="p-ures${s}" placeholder="Üres" oninput="sendData()">
+                </div>
+            `).join('')}
+        </div>
+    `;
+    return card;
+}
+
+function addPlayer() {
+    if (playerCount >= 200) {
+        alert("Elérted a maximális 200 fős létszámot!");
+        return;
+    }
+    const container = document.getElementById('playersContainer');
+    container.appendChild(createPlayerCard(playerCount));
+    playerCount++;
+    sendData();
+}
+
+function removeLastPlayer() {
+    if (playerCount <= 1) {
+        alert("Legalább 1 játékosnak maradnia kell!");
+        return;
+    }
+    const container = document.getElementById('playersContainer');
+    container.removeChild(container.lastChild);
+    playerCount--;
+    sendData();
+}
+
+function sendData() {
+    const title = document.getElementById('tournamentTitle').value || 'Egyéni Teke Bajnokság';
+    const players = [];
+    const cards = document.querySelectorAll('.card');
+
+    cards.forEach((card, idx) => {
+        const name = card.querySelector('.p-name').value;
+        const team = card.querySelector('.p-team').value;
+        let totalTeli = 0, totalTarol = 0, totalUres = 0;
+        const sets = [];
+
+        for (let s = 0; s < 4; s++) {
+            const teli = parseInt(card.querySelector(`.p-teli${s}`).value) || 0;
+            const tarol = parseInt(card.querySelector(`.p-tarol${s}`).value) || 0;
+            const ures = parseInt(card.querySelector(`.p-ures${s}`).value) || 0;
+
+            totalTeli += teli;
+            totalTarol += tarol;
+            totalUres += ures;
+            sets.push(teli + tarol);
+        }
+
+        players.push({
+            id: idx + 1,
+            name: name || `Játékos ${idx + 1}`,
+            team: team || '-',
+            sets: sets,
+            teli: totalTeli,
+            tarol: totalTarol,
+            ures: totalUres,
+            total: totalTeli + totalTarol
+        });
+    });
+
+    db.ref('egyeni_dinamikus_bowling').set({
+        title: title,
+        players: players
+    });
+}
+
+// Kezdésnek 1 fővel indul
+addPlayer();
+</script>
+</body>
+</html>
